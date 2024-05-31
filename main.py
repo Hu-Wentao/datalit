@@ -87,11 +87,6 @@ if __name__ == '__main__':
         return st.session_state['meta_df']
 
 
-    def _on_change_file():
-        if (file := st.session_state['file']) != state_data_file():  # 文件变更
-            state_data_file(update=file)  # 更新文件路径
-
-
     def _on_change_edited_df():
         """state自带update用于更新状态, 本函数只用于接收editor的change,转换为state(update)"""
         change = st.session_state['edited_df']
@@ -145,13 +140,13 @@ if __name__ == '__main__':
         _file = st.query_params.get('file')
         state_data_file(update=_file)
         st.session_state['file'] = _file  # state_data_file不能修改widget绑定的值,因此在这里初始化
-    if 'file' not in st.session_state:  # 初始化: 传入示例数据
-        st.session_state['file'] = _DEFAULT_DATA_FILE
 
     """## TinyData"""
-    with st.expander(f"数据源 {st.session_state.get('file') or ""}", expanded=st.query_params.get('file') is None):
-        st.text_input("文件路径", key='file', on_change=_on_change_file)
-
+    with st.expander(f"数据源 {st.session_state.get('data_file') or ""}", expanded=st.query_params.get('file') is None):
+        _input = st.text_input("文件路径", value=st.session_state.get('file') or _DEFAULT_DATA_FILE)
+        if _input != st.session_state.get('data_file'):
+            if st.button("打开/创建"):
+                state_data_file(update=_input)
     # st.session_state
     if st.session_state.get('df') is None:
         st.stop()  # 未打开文件则暂停
