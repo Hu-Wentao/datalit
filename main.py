@@ -101,6 +101,8 @@ if __name__ == '__main__':
                 for col, val in edits.items():
                     df.at[row_id, col] = val
         if added := change['added_rows']:  # 添加 added rows
+            if added == [{}]:
+                return  # 添加空行不保存直接返回不刷新 (避免打断输入)
             df = pd.concat([df] + [pd.DataFrame(row, index=[0]) for row in added], ignore_index=True)
         if deleted := change['deleted_rows']:  # 删除 deleted rows
             df.drop(deleted, inplace=True)
