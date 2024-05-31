@@ -7,9 +7,9 @@
 >
 > 单文件, 简单快捷的为你的CLI程序添加GUI面板!
 > 
-> [源代码](https://github.com/Hu-Wentao/datalit/blob/tiny_data/main.py)
+> [源代码 tiny_data](https://github.com/Hu-Wentao/datalit/blob/tiny_data/main.py)
 > 
-> [在线Demo](https://tiny-data.streamlit.app/) 
+> [在线Demo https://tiny-data.streamlit.app/](https://tiny-data.streamlit.app/) 
 
 
 ### 运行
