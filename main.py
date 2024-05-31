@@ -1,179 +1,178 @@
 import os
-from typing import Optional
 
 import pandas as pd
 import streamlit as st
 
+_DEFAULT_DATA_FILE = './data/default.csv'
 
-def read_file(file: str, create=True, object_as_str=True) -> pd.DataFrame:
-    """读取数据文件
-    :param object_as_str: 空白的object列将被识别为str
-    :param file: 数据文件路径
-    :param create: True 不存在则创建
+
+def read_file(file: str) -> pd.DataFrame:
+    """读取数据文件; 不存在则新建
+    :param file: 数据文件路径; 支持 csv
     :return:
     """
-    _abs_file = os.path.abspath(file)
-    _path = os.path.dirname(_abs_file)
-    if not os.path.exists(_path):
-        if create:
-            os.makedirs(_path)
-        else:
-            raise RuntimeError(f"路径不存在[{_path}]")
-
+    os.makedirs(os.path.dirname((_abs_file := os.path.abspath(file))), exist_ok=True)
     if not os.path.isfile(_abs_file):
-        if create:
-            return pd.DataFrame({'column1': [], 'column2': []})
-        else:
-            raise RuntimeError(f"文件不存在[{file}]")
+        return pd.DataFrame({'name': ['Zhang Example'], 'age': [666]})  # 创建Demo数据
+    try:
+        if (_suffix := os.path.splitext(file)[1]) == '.csv':
+            return pd.read_csv(file, on_bad_lines="skip")
+        else:  # 可以支持更多类型, 但注意save同样类型的文件
+            raise RuntimeError(f"尚不支持的文件类型[{_suffix}]")
+    except pd.errors.EmptyDataError:  # 文件存在但内容空白
+        return pd.DataFrame()
 
-    _suffix = os.path.splitext(file)[1]
-    if _suffix == '.csv':
-        _df = pd.read_csv(file)
-        if object_as_str:
-            # 将所有 object 类型的列转换成 str 类型
-            print("debug1#\n", _df.dtypes)
-            object_columns = _df.select_dtypes(include=['object']).columns
-            _df[object_columns] = _df[object_columns].astype(str)
-            print("debug2#\n", _df.dtypes)
-        return _df
+
+def write_file(data: pd.DataFrame, file: str):
+    if (_suffix := os.path.splitext(file)[1]) == '.csv':
+        data.to_csv(file, index=False)
     else:
-        raise RuntimeError(f"尚不支持的文件[{_suffix}]")
+        raise RuntimeError(f"尚不支持的文件类型[{_suffix}]")
+
+
+def adp_data_editor_height(df_len: int, reserve=1, least_len=2) -> int:
+    if df_len < least_len:
+        df_len = least_len
+    return 2 + (df_len + 1 + reserve) * 35
 
 
 if __name__ == '__main__':
-    _DEFAULT_CSV = './data/default.csv'
 
-    if 'df' not in st.session_state:
-        st.session_state['df'] = None
-    #  key='file_path'
-    if 'state_save_df' not in st.session_state:
-        st.session_state['state_save_df'] = False
-
-
-    def state_df() -> Optional[pd.DataFrame]:
-        """暂存df, 无需频繁读写磁盘"""
-        if (_df := st.session_state['df']) is None and (file_path := st.session_state['file_path']) is not None:
-            # 未读取df,且已经设置文件路径, 则读取文件
-            # print("read_file#", file_path)
-            _df = read_file(file_path, create=False, object_as_str=False)
-            st.session_state['df'] = _df
-        return _df
+    def state_data_file(update: str = None) -> str:
+        """ data文件路径; 同时保存在session与url中
+        :param update: 新文件
+        :return:
+        """
+        if update:  # 必须放在开头, 初始化有递归调用
+            # st.session_state['file'] = update # 不能修改widget绑定的值
+            st.query_params['file'] = update
+            st.session_state['data_file'] = update
+            state_df(update=read_file(update), save=False)  # 刚从磁盘读取的原始数据,无需save
+            state_meta_df(update=True)  # 更新df同时也要更新meta_df
+        elif 'data_file' not in st.session_state:
+            st.session_state['data_file'] = None
+        return st.session_state['data_file']
 
 
-    def state_save_df(value=None) -> bool:
-        if value is not None:
-            st.session_state['state_save_df'] = value
-        return st.session_state['state_save_df']
+    def state_df(update: pd.DataFrame = None, save=True) -> pd.DataFrame:
+        """
+        :param update: 更新df, 来自数据操作/文件变更
+        :param save: 写入磁盘
+        :return: df缓存
+        """
+        if 'df' not in st.session_state:  # 初始化session
+            st.session_state['df'] = None
+        if update is not None:
+            st.session_state['df'] = update  # 这行代码导致UI刷新,editor高度变化
+            if save:
+                write_file(update)
+        if st.session_state['df'] is None:
+            state_df(read_file(state_data_file()), save=False)  # 刚从磁盘读取的原始数据,无需save
+            state_meta_df(update=True)  # 更新df同时也要更新meta_df
+        return st.session_state['df']
 
 
-    def save_df(force=False):
-        if state_save_df() or force:
-            # edited_df.to_csv(st.session_state['file_path'], index=False)
-            df.to_csv(st.session_state['file_path'], index=False)
-            state_save_df(value=False)
+    def state_meta_df(update: bool = False) -> pd.DataFrame:
+        """
+        :param update: 由于meta_df 直接来自于df, 没有持久化, 因此update用bool表达
+        :return:
+        """
+        if 'meta_df' not in st.session_state:  # 初始化session
+            st.session_state['meta_df'] = None
+        if update or st.session_state['meta_df'] is None:
+            meta_df = state_df().dtypes.astype(str).reset_index()
+            meta_df.rename(columns={'index': 'col_name', 0: 'col_type'}, inplace=True)
+            meta_df['col_name'] = meta_df['col_name'].astype(str)
+            st.session_state['meta_df'] = meta_df
+        return st.session_state['meta_df']
+
+
+    def _on_change_file(un_exist_ok=False):
+        if (file := st.session_state['file']) != state_data_file():  # 文件变更
+            if un_exist_ok or os.path.exists(file):
+                state_data_file(update=file)  # 更新文件路径
+
+
+    def _on_change_edited_df():
+        """state自带update用于更新状态, 本函数只用于接收editor的change,转换为state(update)"""
+        change = st.session_state['edited_df']
+        df = state_df()
+        if edited := change['edited_rows']:  # 更新 edited rows
+            for row_id, edits in edited.items():
+                for col, val in edits.items():
+                    df.at[row_id, col] = val
+        if added := change['added_rows']:  # 添加 added rows
+            df = pd.concat([df] + [pd.DataFrame(row, index=[0]) for row in added], ignore_index=True)
+        if deleted := change['deleted_rows']:  # 删除 deleted rows
+            df.drop(deleted, inplace=True)
+        state_df(df, save=True)  # 刷新 df
 
 
     def _on_change_edited_meta_df():
+        """state自带update用于更新状态, 本函数只用于接收editor的change,转换为state(update)"""
         change = st.session_state['edited_meta_df']
-        edited: dict[int, dict] = change['edited_rows']  # dict[`index`:Series]
-        added: list[dict] = change['added_rows']  # list[Series]
-        deleted: list[int] = change['deleted_rows']  # list[`df index`]
-        need_save = False
-        if edited:  # 编辑列属性 # {2: {'col_name': 'foo'}},
+        df = state_df()
+        if edited := change['edited_rows']:  # 编辑列属性 # {2: {'col_name': 'foo'}},
             rename_cols = {df.columns[idx]: chg['col_name'] for idx, chg in edited.items() if 'col_name' in chg}
-            # {老列名: 新列名}
-            if rename_cols:  # {老列名:新列名}
+            if rename_cols:  # ==重命名列 {原列名: 新列名}
                 df.rename(columns=rename_cols, inplace=True)  # {老列名:新列名}
-                need_save = True
-            # {列名: 新类型}
-            if retype_cols := {df.columns[idx]: chg['col_type'] for idx, chg in edited.items() if 'col_type' in chg}:
-                print("retype_cols#", retype_cols)
+                state_df(df, save=True)
+            if retype_cols := {df.columns[idx]: chg['col_type']  # ==转换列类型 {列名: 新类型}
+                               for idx, chg in edited.items() if 'col_type' in chg}:
                 olds = {k: str(v) for k, v in df.dtypes.to_dict().items()}
                 for col, n_type in retype_cols.items():
                     if olds[col] != n_type:
                         if n_type == 'object':
-                            df[col] = df[col].astype(str)
+                            df[col] = df[col].astype(str, errors='ignore')
                         elif n_type == 'float64':
-                            df[col] = df[col].astype(float)
+                            df[col] = df[col].astype(float, errors='ignore')
                         elif n_type == 'int64':
-                            df[col] = df[col].astype(int)
-                need_save = True
-                pass
-        if added:  # 新增列 [{'col_name':'bar'}]
+                            df[col] = df[col].astype(int, errors='ignore')
+                state_df(df, save=True)
+        if added := change['added_rows']:  # 新增列 [{'col_name':'bar'}]
             col_name_ls = [col['col_name'] for col in added if 'col_name' in col]
             for name in col_name_ls:
                 df[name] = ""  # 默认值 “”
-            need_save = True
-            pass
-        if deleted:  # [1,2,3]
+            state_df(df, save=True)
+        if deleted := change['deleted_rows']:  # 删除列 [1,2,3]
             df.drop(df.columns[deleted], axis='columns', inplace=True)
-            need_save = True
-
-        if need_save:
-            save_df()
-            # df.to_csv(csv_file, index=False)  # 直接保存到磁盘
-        pass
+            state_df(df, save=True)
+        state_meta_df(update=True)  # 注意刷新 meta_df
 
 
-    def _on_change_edited_df(force=False):
-        change = st.session_state['edited_df']
-        edited: dict[int, dict] = change['edited_rows']  # dict[`index`:Series]
-        added: list[dict] = change['added_rows']  # list[Series]
-        deleted: list[int] = change['deleted_rows']  # list[`df index`]
+    if 'file' in st.query_params:  # 从URL更新
+        _file = st.query_params.get('file')
+        state_data_file(update=_file)
+        st.session_state['file'] = _file  # state_data_file不能修改widget绑定的值,因此在这里初始化
+    if 'file' not in st.session_state:  # 初始化: 传入示例数据
+        st.session_state['file'] = _DEFAULT_DATA_FILE
 
-        if not force and added == [{}]:  # ignore add blank
-            return
-        state_save_df(value=True)
+    """## TinyData"""
+    with st.expander(f"数据源 {st.session_state.get('file') or ""}", expanded=st.query_params.get('file') is None):
+        st.text_input("文件路径", key='file', on_change=_on_change_file)
+        if not os.path.exists(st.session_state['file']):
+            if st.button("创建"):
+                _on_change_file(un_exist_ok=True)  # 允许打开不存在的文件(创建)
 
+    # st.session_state
+    if st.session_state.get('df') is None:
+        st.stop()  # 未打开文件则暂停
 
-    # =====
-    """
-    ### 管理数据
-    """
-    with st.expander("数据源", expanded=True):
-        # file_path = st.text_input("文件路径", value=_DEFAULT_CSV)
-        st.text_input("文件路径", key='file_path', value=_DEFAULT_CSV)
-
-    df = state_df()
-
-    """---"""
     with st.expander("编辑列", expanded=True):
-        meta_df = df.dtypes.astype(str).reset_index()
-        meta_df.rename(columns={'index': 'col_name', 0: 'col_type'}, inplace=True)
-
-        edited_meta_df = st.data_editor(
-            meta_df, key='edited_meta_df', use_container_width=True,
-            height=72 + len(meta_df) * 35, num_rows="dynamic", on_change=_on_change_edited_meta_df,
-            column_config={
-                'col_name': st.column_config.TextColumn(label='列名', help='编辑列名称'),
-                'col_type': st.column_config.SelectboxColumn(label='类型', help='指定类型',
-                                                             options=['object', 'float64', 'int64']),
-            }
+        st.data_editor(
+            state_meta_df(), key='edited_meta_df', use_container_width=True,
+            height=adp_data_editor_height(len(state_meta_df())),
+            on_change=_on_change_edited_meta_df, num_rows="dynamic",
+            column_config={'col_name': st.column_config.TextColumn(label='列名', help='编辑列名称'),
+                           'col_type': st.column_config.SelectboxColumn(label='类型', help='指定类型',
+                                                                        options=['object', 'float64', 'int64'])}
         )
-    _cols = df.select_dtypes(include=['object', 'float64', 'int64']).columns
-    if len(_cols) > 0:
-        df[_cols] = df[_cols].astype(str)  # 便于editor编辑内容
-    df = st.data_editor(
-        df, key='edited_df', use_container_width=True, height=2 + (len(df) + 2) * 35,
-        on_change=_on_change_edited_df, num_rows="dynamic",
-        column_config={
-            meta['col_name']: {
-                # 'label': None,  # None则用列名
-                # 'width': None,  # "small", "medium", "large", or None(sized fit)
-                # 'help': 'msg'
-                # 'disabled': False, # 默认False
-                # 'required': False, # 默认False
-                # 'default': meta['default_val'],  # value # str, bool, int, float, or None; 设置默认值
-                # 'value' # str, bool, int, float, or None; 设置默认值
-                # 'hidden': False #  bool or None, 默认False
-                'type_config': {  # 参见 class TextColumnConfig(TypedDict):
-                    'type': 'text' if (meta['col_type'] in ['object', 'str']) else 'number'
-                }
-            } for meta in edited_meta_df.to_dict(orient='records')
-        }
-    )
 
-    save_df()
-
-    # if st.button("手动保存"):
-    #     save_df(force=True)
+    with st.expander("编辑行", expanded=True):
+        st.data_editor(
+            state_df(), key='edited_df', use_container_width=True, height=adp_data_editor_height(len(state_df())),
+            on_change=_on_change_edited_df, num_rows="dynamic",
+            column_config={meta['col_name']: {'type_config': {  # 参见 class TextColumnConfig(TypedDict):
+                'type': 'text' if (meta['col_type'] in ['object', 'str']) else 'number'}
+            } for meta in state_meta_df().to_dict(orient='records')},
+        )

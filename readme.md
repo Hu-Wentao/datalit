@@ -4,9 +4,7 @@
 
 
 > 100行代码实现AirTable/飞书多维表格
-> [tiny_data.py](pages%2Ftiny_data.py)
-> 
-> 参照 [运行](#运行) 启动后进入 http://localhost:8501/tiny_data 查看
+> 参照 [运行](#运行) 启动后进入 http://localhost:8501 查看
 
 ### 运行
 
