@@ -141,7 +141,7 @@ if __name__ == '__main__':
         state_data_file(update=_file)
         st.session_state['file'] = _file  # state_data_file不能修改widget绑定的值,因此在这里初始化
 
-    """## DataLit"""
+    """## TinyData"""
     with st.expander(f"数据源 {st.session_state.get('data_file') or ""}", expanded=st.query_params.get('file') is None):
         _input = st.text_input("文件路径", value=st.session_state.get('file') or _DEFAULT_DATA_FILE)
         if _input != st.session_state.get('data_file'):
