@@ -65,7 +65,7 @@ if __name__ == '__main__':
         if update is not None:
             st.session_state['df'] = update  # 这行代码导致UI刷新,editor高度变化
             if save:
-                write_file(update)
+                write_file(data=update, file=state_data_file())
         if st.session_state['df'] is None:
             state_df(read_file(state_data_file()), save=False)  # 刚从磁盘读取的原始数据,无需save
             state_meta_df(update=True)  # 更新df同时也要更新meta_df
@@ -87,10 +87,9 @@ if __name__ == '__main__':
         return st.session_state['meta_df']
 
 
-    def _on_change_file(un_exist_ok=False):
+    def _on_change_file():
         if (file := st.session_state['file']) != state_data_file():  # 文件变更
-            if un_exist_ok or os.path.exists(file):
-                state_data_file(update=file)  # 更新文件路径
+            state_data_file(update=file)  # 更新文件路径
 
 
     def _on_change_edited_df():
@@ -150,9 +149,6 @@ if __name__ == '__main__':
     """## TinyData"""
     with st.expander(f"数据源 {st.session_state.get('file') or ""}", expanded=st.query_params.get('file') is None):
         st.text_input("文件路径", key='file', on_change=_on_change_file)
-        if not os.path.exists(st.session_state['file']):
-            if st.button("创建"):
-                _on_change_file(un_exist_ok=True)  # 允许打开不存在的文件(创建)
 
     # st.session_state
     if st.session_state.get('df') is None:
